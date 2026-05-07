@@ -2,30 +2,156 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>한글 국악 연주회</title>
+    <title>한글 수묵 연주회</title>
     <script src="https://unpkg.com/hangul-js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
     <style>
-        body { margin: 0; background-color: #f4f1ea; overflow: hidden; font-family: serif; }
+        body { margin: 0; background-color: #f4f1ea; overflow: hidden; font-family: 'Noto Serif KR', serif; }
         canvas { position: absolute; top: 0; left: 0; z-index: 1; }
-        .container { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        .ui { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
         textarea { 
-            width: 60%; height: 150px; background: rgba(255,255,255,0.2); 
-            border: 1px solid #ccc; border-radius: 10px; padding: 20px;
-            font-size: 1.5rem; outline: none; resize: none; text-align: center;
+            width: 60%; height: 150px; background: rgba(255,255,255,0.4); 
+            border: 1px solid #999; border-radius: 12px; padding: 25px;
+            font-size: 1.5rem; outline: none; resize: none; margin-bottom: 25px;
         }
-        h1 { color: #333; margin-bottom: 10px; }
-        p { color: #666; font-size: 0.9rem; }
+        .btn-group { display: flex; gap: 20px; }
+        button { 
+            padding: 12px 35px; border-radius: 30px; border: 1px solid #333; 
+            background: #333; color: #fff; cursor: pointer; font-size: 1.1rem; transition: 0.3s;
+        }
+        button:hover { background: #555; }
+        .clear-btn { background: transparent; color: #a00; border-color: #a00; }
     </style>
 </head>
 <body>
     <canvas id="inkCanvas"></canvas>
-    <div class="container">
-        <h1>한글 수묵 연주회</h1>
-        <textarea id="inputArea" placeholder="입력하기"></textarea>
-        <p>초성: 가야금/거문고 | 중성: 생황/해금 | 종성: 장구 | Space: 덩!</p>
+    <div class="ui">
+        <textarea id="inputArea" placeholder="당신의 속도대로 연주됩니다..."></textarea>
+        <div class="btn-group">
+            <button onclick="playMyRhythm()">내 리듬으로 연주하기</button>
+            <button class="clear-btn" onclick="clearAll()">전체 지우기</button>
+        </div>
     </div>
-    <script src="script.js"></script>
+
+<script>
+// --- 사운드 설정 (기존과 동일, 확장자 주의) ---
+const sounds = {
+    gayageum: new Howl({ src: ['./sanjo_gayageum_sus_mid_03.mp3'], volume: 0.6, sprite: { 'ㅅ': [0, 7000], 'ㅇ': [7000, 7000], 'ㅈ': [14000, 7000], 'ㅊ': [21000, 7000], 'ㅋ': [28000, 7000], 'ㅌ': [35000, 7000], 'ㅍ': [42000, 7000], 'ㅎ': [49000, 7000] } }),
+    saenghwang: new Howl({ src: ['./생황_음계와농음_중.mp3'], volume: 0.3, sprite: { 'ㅏ': [0, 10000], 'ㅑ': [10000, 10000], 'ㅓ': [20000, 10000], 'ㅕ': [30000, 10000], 'ㅗ': [40000, 10000] } }),
+    gumungo: new Howl({ src: ['./gumungo_U_scale_mid_02.wav'], volume: 0.6, sprite: { 'ㄱ': [0, 4000], 'ㄴ': [4000, 5000], 'ㄷ': [9000, 5000], 'ㄹ': [14000, 5000], 'ㅁ': [19000, 5000], 'ㅂ': [24000, 5000] } }),
+    haegeum: new Howl({ src: ['./Haegeum_1.wav'], volume: 0.3, sprite: { 'ㅛ': [0, 2000], 'ㅜ': [2000, 3000], 'ㅠ': [5000, 3000], 'ㅡ': [8000, 3000], 'ㅣ': [11000, 3000] } }),
+    janggu: {
+        deong: new Howl({ src: ['./Janggu_3_1.wav'], volume: 0.5 }),
+        gideok: new Howl({ src: ['./Janggu_2_1.wav'], volume: 0.5 }),
+        kung: new Howl({ src: ['./Janggu_1_1.wav'], volume: 0.4 }),
+        deoreoreo: new Howl({ src: ['./Janggu_4_1.wav'], volume: 0.4 }),
+        deok: new Howl({ src: ['./Janggu_5_1.wav'], volume: 0.4 }),
+        deo: new Howl({ src: ['./Janggu_6_1.wav'], volume: 0.2 })
+    }
+};
+
+// --- 타자 리듬 기록 변수 ---
+let rhythmData = []; // [{char: '안', delay: 500}, ...]
+let lastTime = Date.now();
+
+const inputArea = document.getElementById('inputArea');
+
+inputArea.addEventListener('input', (e) => {
+    if (e.inputType === 'deleteContentBackward') {
+        rhythmData.pop(); // 지우면 마지막 기록 삭제
+        return;
+    }
+    const now = Date.now();
+    const delay = now - lastTime;
+    const char = e.target.value.slice(-1);
+    
+    rhythmData.push({ char: char, delay: delay });
+    lastTime = now;
+});
+
+// --- 수묵 효과 (블러 처리로 환공포증 방지) ---
+const canvas = document.getElementById('inkCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+let inkSpots = [];
+
+class InkSpot {
+    constructor(x, y, targetSize) {
+        this.x = x; this.y = y;
+        this.currentSize = 0;
+        this.targetSize = targetSize;
+        this.opacity = 0.2;
+        this.blur = 20;
+    }
+    update() { if (this.currentSize < this.targetSize) { this.currentSize += 2; this.opacity -= 0.001; } }
+    draw() {
+        if (this.opacity <= 0) return;
+        ctx.save();
+        ctx.filter = `blur(${this.blur}px)`;
+        const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.currentSize);
+        grad.addColorStop(0, `rgba(0,0,0,${this.opacity})`);
+        grad.addColorStop(1, `rgba(0,0,0,0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.currentSize, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+}
+
+function animate() {
+    ctx.fillStyle = 'rgba(244, 241, 234, 0.03)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    inkSpots.forEach((s, i) => { s.update(); s.draw(); if(s.opacity <= 0) inkSpots.splice(i,1); });
+    requestAnimationFrame(animate);
+}
+animate();
+
+// --- 연주 함수 (기록된 리듬 사용) ---
+function playChar(char, x, y) {
+    const units = Hangul.disassemble(char);
+    units.forEach((unit, i) => {
+        setTimeout(() => {
+            if (i === 0) {
+                if (sounds.gumungo._sprite[unit]) sounds.gumungo.play(unit);
+                else if (sounds.gayageum._sprite[unit]) sounds.gayageum.play(unit);
+                sounds.janggu.deo.play();
+                inkSpots.push(new InkSpot(x, y, 80));
+            } else if (Hangul.isVowel(unit)) {
+                if (sounds.saenghwang._sprite[unit]) sounds.saenghwang.play(unit);
+                else if (sounds.haegeum._sprite[unit]) sounds.haegeum.play(unit);
+                inkSpots.push(new InkSpot(x, y, 150));
+            } else {
+                if (['ㄱ', 'ㄷ', 'ㅂ'].includes(unit)) sounds.janggu.deok.play();
+                else if (unit === 'ㄹ') sounds.janggu.deoreoreo.play();
+                else sounds.janggu.kung.play();
+                inkSpots.push(new InkSpot(x, y, 50));
+            }
+        }, i * 80);
+    });
+}
+
+function playMyRhythm() {
+    let accumulatedDelay = 0;
+
+    rhythmData.forEach((item) => {
+        // 너무 긴 공백(예: 5초 이상)은 연주 재미를 위해 1.5초로 제한
+        const delay = Math.min(item.delay, 1500);
+        accumulatedDelay += delay;
+
+        setTimeout(() => {
+            if (item.char === ' ') {
+                sounds.janggu.deong.play();
+            } else {
+                playChar(item.char, Math.random()*canvas.width, Math.random()*canvas.height);
+            }
+        }, accumulatedDelay);
+    });
+}
+
+function clearAll() {
+    inputArea.value = '';
+    rhythmData = [];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+</script>
 </body>
 </html>
