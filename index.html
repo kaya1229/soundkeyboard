@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한글 수묵 연주회</title>
+    <!-- 라이브러리 로드 -->
+    <script src="https://unpkg.com/hangul-js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    <style>
+        body { margin: 0; background-color: #f4f1ea; font-family: "Noto Serif KR", serif; overflow: hidden; }
+        canvas { position: absolute; top: 0; left: 0; z-index: 1; }
+        .ui-container { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        h1 { color: #333; margin-bottom: 20px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+        textarea { 
+            width: 70%; height: 150px; background: rgba(255,255,255,0.1); 
+            border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; padding: 20px;
+            font-size: 1.5rem; outline: none; resize: none; text-align: center;
+        }
+        .info { margin-top: 20px; color: #666; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <canvas id="inkCanvas"></canvas>
+    <div class="ui-container">
+        <h1>한글 수묵 연주회</h1>
+        <textarea id="inputArea" placeholder="가야금 선율로 글을 써보세요..."></textarea>
+        <p class="info">자음 구간별: 가야금, 거문고, 해금 | 모음: 대금 | 받침: 장구</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
