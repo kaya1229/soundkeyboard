@@ -1,6 +1,5 @@
-// --- 1. 사운드 설정 (실제 파일 길이에 맞춰 재배치) ---
+// --- 1. 사운드 설정 (거문고 55초, 가야금 80초 기준 매핑) ---
 const sounds = {
-    // 거문고 (55초): 총 19개 자음을 넣기 위해 구간을 약 2.8초로 설정
     gumungo: new Howl({ 
         src: ['./gumungo_U_scale_mid_02.wav'], 
         volume: 0.7, 
@@ -12,8 +11,6 @@ const sounds = {
             'ㅌ': [44800, 2800], 'ㅍ': [47600, 2800], 'ㅎ': [50400, 2800]
         } 
     }),
-
-    // 가야금 (80초): 총 21개 모음을 넣기 위해 구간을 약 3.8초로 설정
     gayageum: new Howl({ 
         src: ['./sanjo_gayageum_sus_mid_03.mp3'], 
         volume: 0.6, 
@@ -25,28 +22,16 @@ const sounds = {
             'ㅟ': [60800, 3800], 'ㅠ': [64600, 3800], 'ㅡ': [68400, 3800], 'ㅢ': [72200, 3800], 'ㅣ': [76000, 3800]
         } 
     }),
-
     janggu: {
-        deong: new Howl({ src: ['./Janggu_3_1.wav'], volume: 0.6 }),      // Space (합장단)
-        gideok: new Howl({ src: ['./Janggu_2_1.wav'], volume: 0.6 }),     // 마침표 (기덕)
-        deo: new Howl({ src: ['./Janggu_6_1.wav'], volume: 0.15 }),      // 글자 시작 (더)
-        kung: new Howl({ src: ['./Janggu_1_1.wav'], volume: 0.35 })       // 받침 (쿵)
+        deong: new Howl({ src: ['./Janggu_3_1.wav'], volume: 0.6 }),
+        gideok: new Howl({ src: ['./Janggu_2_1.wav'], volume: 0.6 }),
+        deo: new Howl({ src: ['./Janggu_6_1.wav'], volume: 0.15 }),
+        kung: new Howl({ src: ['./Janggu_1_1.wav'], volume: 0.35 })
     }
 };
 
-// --- 2. 리듬 기록 시스템 ---
-let rhythmData = []; 
-let lastTime = Date.now();
+// --- 2. 입력 감지 (이제 리듬 기록 없이 텍스트만 유지) ---
 const inputArea = document.getElementById('inputArea');
-
-inputArea.addEventListener('input', (e) => {
-    if (e.inputType === 'deleteContentBackward') { rhythmData.pop(); return; }
-    const now = Date.now();
-    const delay = now - lastTime;
-    const char = e.target.value.slice(-1);
-    rhythmData.push({ char: char, delay: delay });
-    lastTime = now;
-});
 
 // --- 3. 수묵 애니메이션 (안개형 번짐) ---
 const canvas = document.getElementById('inkCanvas');
@@ -56,21 +41,21 @@ let inkSpots = [];
 
 class InkSpot {
     constructor(x, y, targetSize) {
-        this.x = x + (Math.random() * 60 - 30);
-        this.y = y + (Math.random() * 60 - 30);
+        this.x = x + (Math.random() * 100 - 50);
+        this.y = y + (Math.random() * 100 - 50);
         this.currentSize = 0;
         this.targetSize = targetSize;
-        this.opacity = 0.18;
-        this.blur = 25; 
+        this.opacity = 0.2;
+        this.blur = 30; 
     }
-    update() { if (this.currentSize < this.targetSize) { this.currentSize += 1.2; this.opacity -= 0.0006; } }
+    update() { if (this.currentSize < this.targetSize) { this.currentSize += 1.5; this.opacity -= 0.0006; } }
     draw() {
         if (this.opacity <= 0) return;
         ctx.save();
         ctx.filter = `blur(${this.blur}px)`;
         const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.currentSize);
-        grad.addColorStop(0, `rgba(0, 0, 0, ${this.opacity})`);
-        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        grad.addColorStop(0, `rgba(0,0,0,${this.opacity})`);
+        grad.addColorStop(1, `rgba(0,0,0,0)`);
         ctx.fillStyle = grad;
         ctx.beginPath(); ctx.arc(this.x, this.y, this.currentSize, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
@@ -78,70 +63,72 @@ class InkSpot {
 }
 
 function animate() {
-    ctx.fillStyle = 'rgba(244, 241, 234, 0.025)';
+    ctx.fillStyle = 'rgba(244, 241, 234, 0.03)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    inkSpots.forEach((spot, index) => {
-        spot.update(); spot.draw();
-        if (spot.opacity <= 0) inkSpots.splice(index, 1);
-    });
+    inkSpots.forEach((s, i) => { s.update(); s.draw(); if(s.opacity <= 0) inkSpots.splice(i,1); });
     requestAnimationFrame(animate);
 }
 animate();
 
-// --- 4. 연주 함수 ---
+// --- 4. 연주 핵심 로직 ---
 function playChar(char, x, y) {
     const units = Hangul.disassemble(char);
     
-    // 초성 (거문고 + 장구 '더')
+    // 초성 연주
     if (sounds.gumungo._sprite[units[0]]) {
         sounds.gumungo.play(units[0]);
         sounds.janggu.deo.play();
-        inkSpots.push(new InkSpot(x, y, 90));
+        inkSpots.push(new InkSpot(x, y, 100));
     }
 
-    // 중성 (가야금) - 0.1초 뒤
+    // 중성 연주 (시차 부여)
     const vowel = units.find(u => Hangul.isVowel(u));
     if (vowel && sounds.gayageum._sprite[vowel]) {
         setTimeout(() => {
             sounds.gayageum.play(vowel);
-            inkSpots.push(new InkSpot(x, y, 160));
-        }, 100);
+            inkSpots.push(new InkSpot(x, y, 180));
+        }, 120);
     }
 
-    // 종성 (장구 '쿵') - 0.25초 뒤
+    // 종성 연주 (시차 부여)
     if (units.length > 2) {
         setTimeout(() => {
             sounds.janggu.kung.play();
-            inkSpots.push(new InkSpot(x, y, 50));
-        }, 250);
+            inkSpots.push(new InkSpot(x, y, 60));
+        }, 280);
     }
 }
 
-function playMyRhythm() {
-    let accumulatedDelay = 0;
-    rhythmData.forEach((item) => {
-        const delay = Math.min(item.delay, 1500); 
-        accumulatedDelay += delay;
-        setTimeout(() => {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            if (item.char === ' ' || item.char === '\n') {
-                sounds.janggu.deong.play();
-                inkSpots.push(new InkSpot(x, y, 250));
-            } else if (['.', '!', '?'].includes(item.char)) {
-                sounds.janggu.gideok.play();
-                inkSpots.push(new InkSpot(x, y, 200));
-            } else {
-                playChar(item.char, x, y);
-            }
-        }, accumulatedDelay);
-    });
+async function playMyRhythm() {
+    const text = inputArea.value;
+    if (!text) return;
+
+    for (let char of text) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height;
+
+        if (char === ' ') {
+            sounds.janggu.deong.play();
+            inkSpots.push(new InkSpot(x, y, 300));
+            await new Promise(r => setTimeout(r, 700)); // 띄어쓰기 휴지기
+        } else if (['.', '!', '?'].includes(char)) {
+            sounds.janggu.gideok.play();
+            inkSpots.push(new InkSpot(x, y, 250));
+            await new Promise(r => setTimeout(r, 1000)); // 문장 마침 휴지기
+        } else if (char === ',') {
+            await new Promise(r => setTimeout(r, 400)); // 쉼표 휴지기
+        } else if (char === '\n') {
+            sounds.janggu.deong.play();
+            await new Promise(r => setTimeout(r, 1200)); // 줄바꿈 긴 휴지기
+        } else {
+            playChar(char, x, y);
+            await new Promise(r => setTimeout(r, 500)); // 일반 글자 간격
+        }
+    }
 }
 
 function clearAll() {
     inputArea.value = '';
-    rhythmData = [];
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     inkSpots = [];
-    lastTime = Date.now();
 }
